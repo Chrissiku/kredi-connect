@@ -1,120 +1,113 @@
 import express from "express";
-import { VerifiableCredential, Jwt } from "@web5/credentials";
-import KccCredential from "./kccCredential.js";
+import {
+  connectToWeb5,
+  configureProtocol,
+  generateCredential,
+  sendToCustomerDWN,
+  readRecord,
+} from "./index.js";
+import { startLoading, stopLoading } from "../loading.js";
 
 const app = express();
 app.use(express.json());
 
-// app.post("/credentials", async (req, res) => {
-//   try {
-//     /*****************************************************************
-//      * Extract and validate the access token from Authorization header
-//      ******************************************************************/
-//     const authHeader = req.headers["authorization"];
-//     if (!authHeader) {
-//       return res
-//         .status(401)
-//         .json({ errors: ["Authorization header required"] });
-//     }
+const config = { port: 3000 };
+let issuerBearerDid, web5Res;
 
-//     const tokenParts = authHeader.split("Bearer ");
-//     if (tokenParts.length !== 2) {
-//       return res
-//         .status(401)
-//         .json({ errors: ["Authorization header format is Bearer <token>"] });
-//     }
+/**
+ * Initialize Web5 connection and configure protocol on startup.
+ */
+(async function initialize() {
+  try {
+    const {
+      issuerDid,
+      web5,
+      issuerBearerDid: bearerDid,
+    } = await connectToWeb5();
+    await configureProtocol(web5, issuerDid);
+    web5Res = web5;
+    issuerBearerDid = bearerDid;
+    console.log("✅ Initialization successful");
+  } catch (error) {
+    console.error("Initialization failed:", error.message);
+    process.exit(1); // Exit if initialization fails
+  }
+})();
 
-//     const accessToken = tokenParts[1];
-//     const storedCNonce = accessTokenToCNonceMap.get(accessToken);
-//     if (!storedCNonce) {
-//       return res
-//         .status(401)
-//         .json({ errors: ["Invalid or expired access token"] });
-//     }
+// Endpoint to handle credential requests
+app.post("/credentials", async (req, res) => {
+  try {
+    const credential = await generateCredential(req, issuerBearerDid);
+    res.status(200).json({ credential });
 
-//     /**************************************************************
-//      * Extract and validate the JWT and nonce from the proof object
-//      **************************************************************/
-//     const { proof } = req.body;
-//     if (!proof || proof.proof_type !== "jwt" || !proof.jwt) {
-//       return res.status(400).json({ errors: ["Invalid proof provided"] });
-//     }
+    try {
+      await sendToCustomerDWN(credential, web5Res);
+    } catch (sendError) {
+      console.error(`Error sending credential to DWN: ${sendError.message}`);
+    }
+  } catch (error) {
+    res
+      .status(500)
+      .json({ errors: [`An unexpected error occurred: ${error.message}`] });
+  }
+});
 
-//     let customersDidUri, payload;
+// Root endpoint
+app.get("/", (req, res) =>
+  res.send(
+    "Welome to KrediConnect, the Know Customer Credentials (KCC) Issuer server"
+  )
+);
 
-//     try {
-//       const verificationResult = await Jwt.verify({ jwt: proof.jwt });
-//       customersDidUri = verificationResult.payload.iss; // Customer's Decentralized Identifier string
-//       if (storedCNonce === payload.nonce) {
-//         accessTokenToCNonceMap.delete(accessToken);
-//       } else {
-//         return res.status(401).json({ errors: ["Invalid nonce in proof"] });
-//       }
-//     } catch (error) {
-//       return res.status(401).json({ errors: ["Invalid JWT in proof"] });
-//     }
+// Read all records
 
-//     /***********************************************
-//      * Create and sign the credential
-//      ************************************************/
-//     const kccCredentialInstance = new KccCredential(
-//       "US",
-//       "Gold",
-//       {
-//         country: "CD",
-//       },
-//       {
-//         id: "https://vc-to-dwn.tbddev.org/vc-protocol/schema/credential",
-//         type: "JsonSchema",
-//       },
-//       [
-//         {
-//           kind: "document_verification",
-//           checks: ["passport", "government-id", "bank-statement"],
-//         },
-//         {
-//           kind: "proof-of-address",
-//           checks: ["utility-bill", "credit-card-statement"],
-//         },
-//         {
-//           kind: "biometric",
-//           checks: ["face-recognition", "fingerprint"],
-//         },
-//         {
-//           kind: "sanction_screening",
-//           checks: ["PEP"],
-//         },
-//       ]
-//     );
+// Endpoint to handle credential requests
+app.get("/records", async (req, res) => {
+  try {
+    const data = await readRecord(web5Res);
+    res.status(200).json({ data });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ errors: [`An unexpected error occurred: ${error.message}`] });
+  }
+});
 
-//     const known_customer_credential = await VerifiableCredential.create({
-//       issuer: issuerBearerDid.uri, // Issuer's Decentralized Identifier string
-//       subject: customersDidUri, // Customer's Decentralized Identifier string from the verified JWT
-//       expirationDate: "2026-05-19T08:02:04Z",
-//       data: {
-//         countryOfResidence: kccCredentialInstance.data.countryOfResidence,
-//         tier: kccCredentialInstance.data.tier, // optional
-//         jurisdiction: kccCredentialInstance.data.jurisdiction, // optional
-//       },
-//       credentialSchema: kccCredentialInstance.credentialSchema,
-//       evidence: kccCredentialInstance.evidence, // optional
-//     });
+// read single record
+app.get("/records/:recordId?", async (req, res) => {
+  try {
+    // Get recordId from either the route parameter or the request body
+    const recordId = req.params.recordId || req.body.recordId;
 
-//     const credential_token = await known_customer_credential.sign({
-//       did: issuerBearerDid, // Signing with the issuer's bearer DID
-//     });
-//     /***********************************************
-//      * Respond with the signed credential
-//      ************************************************/
-//     return res.status(200).json({ credential: credential_token });
-//   } catch (error) {
-//     /***********************************************
-//      * Generic error handling
-//      ************************************************/
-//     return res.status(500).json({
-//       errors: [`An unexpected error occurred: ${error.message}`],
-//     });
-//   }
-// });
+    if (!recordId) {
+      return res.status(400).json({ error: "recordId is required" });
+    }
 
-export { app as api };
+    // Fetch the record using the provided recordId
+    const { record: singleRecord } = await web5Res.dwn.records.read({
+      message: {
+        filter: {
+          recordId: recordId,
+        },
+      },
+    });
+
+    // Check if singleRecord exists
+    if (!singleRecord) {
+      return res.status(404).json({ error: "Record not found" });
+    }
+
+    // Send the record data as a response
+    const dataText = await singleRecord.data.text();
+    res.json({ credential: dataText });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Start the server
+app.listen(config.port, () => {
+  console.log(`Issuer server running on http://localhost:${config.port}`);
+  stopLoading();
+});
