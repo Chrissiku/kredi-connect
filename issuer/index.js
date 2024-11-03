@@ -134,6 +134,8 @@ export async function sendToCustomerDWN(vc, web5) {
       },
     });
 
+    console.log(record);
+
     await record.send(aliceDid);
     stopLoading();
     console.log("✅ Credential sent to Alice");

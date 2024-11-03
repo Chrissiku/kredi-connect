@@ -7,6 +7,7 @@ import {
   readRecord,
 } from "./index.js";
 import { startLoading, stopLoading } from "../loading.js";
+import { VerifiableCredential } from "@web5/credentials";
 
 const app = express();
 app.use(express.json());
@@ -70,6 +71,25 @@ app.get("/records", async (req, res) => {
     res
       .status(500)
       .json({ errors: [`An unexpected error occurred: ${error.message}`] });
+  }
+});
+
+app.get("/parse", async (req, res) => {
+  const signedVcJwt = req.query.credential;
+  try {
+    const vc = VerifiableCredential.parseJwt({ vcJwt: signedVcJwt });
+    if (!signedVcJwt) {
+      return res.status(400).json({ error: "crendetial is required" });
+    }
+
+    if (!vc) {
+      return res.status(404).json({ error: "Credetial not found" });
+    }
+
+    res.json({ data: vc });
+  } catch (error) {
+    console.error("❌ Error parsing credential:", error.message);
+    throw error;
   }
 });
 
