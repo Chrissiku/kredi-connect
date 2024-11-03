@@ -1,5 +1,7 @@
 # KrediConnect - Know Customer Credentials (KCC) Issuer Server
-
+<img src="./kccserver.png" alt="krediconnect"/>
+<br/>
+<br/>
 Welcome to the KrediConnect project. This repository contains a server application for interacting with the Web5 platform to issue, configure, and manage customer credentials on a Decentralized Web Node (DWN). It also allows secure communication and verification of customer credentials.
 
 ## Table of Contents
@@ -16,7 +18,7 @@ Welcome to the KrediConnect project. This repository contains a server applicati
 
 ## Overview
 
-The KrediConnect , a KCC Issuer server, connects to the Web5 to register an issuer, create know customer credentials, and securely send them to customer DWNs. This process ensures that customer data remains secure and verifiable through cryptographic proofs.
+KrediConnect is a Web5 server designed to issue Known Customer Credentials (KCCs), a form of Verifiable Credential that simplifies the Know Your Customer (KYC) process for users of the tbDEX protocol. These KCCs enable users to access regulated financial services offered by Participating Financial Institutions (PFIs), with secure data transfer and verification handled through customer DWNs (Decentralized Web Nodes).
 
 ---
 
